@@ -23,7 +23,7 @@ setup(
     install_requires=[
             'progressbar2',
             'termcolor',
-            'bchlib'
+            'bchlib == 0.14.0'
     ],
     entry_points= {
         'console_scripts': [
