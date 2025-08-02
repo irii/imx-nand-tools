@@ -61,28 +61,34 @@ class FCB(object):
                         unpack('<I', b'FCB ')
                     ))
                 self.version = unpack('>I', content[8:12])[0]
+                self.NANDTiming = u32le(content, 12)
                 self.page_data_size = u32le(content, 20)
                 self.total_page_size = u32le(content, 24)
                 self.sectors_per_block = u32le(content, 28)
                 self.nb_nands = u32le(content, 32)
-                self.ecc_block_type = u32le(content, 44)
+                self.totalInternalDie = u32le(content, 36)
+                self.cellType = u32le(content, 40)
+                self.ecc_blockNtype = u32le(content, 44)
                 self.ecc_block0size = u32le(content, 48)
                 self.ecc_blockNsize = u32le(content, 52)
                 self.ecc_block0type= u32le(content, 56)
                 self.metadata_bytes = u32le(content, 60)
                 self.nb_ecc_blocks_per_page = u32le(content, 64)
+                self.bootPatch = u32le(content, 96)
+                self.patchSectors = u32le(content, 100)
                 self.fw1_start = u32le(content, 104)
                 self.fw2_start = u32le(content, 108)
                 self.pages_fw1 = u32le(content, 112)
                 self.pages_fw2 = u32le(content, 116)
                 self.bch_type = u32le(content, 136)
+                self.dbbtSearchAreaStartAddress = u32le(content, 120)
                 self.bb_marker = u32le(content, 124)
                 self.bb_marker_bits = u32le(content, 128)
 
                 # We compute the raw marker offset
                 self.marker_page = int(self.bb_marker/self.ecc_blockNsize)
                 self.marker_offset = self.bb_marker % self.ecc_blockNsize
-                self.marker_raw_offset = int(self.metadata_bytes + ceil((self.ecc_block0type*26)/8) + ceil((self.marker_page-1)*(self.ecc_block_type*26)/8) + self.bb_marker)
+                self.marker_raw_offset = int(self.metadata_bytes + ceil((self.ecc_block0type*26)/8) + ceil((self.marker_page-1)*(self.ecc_blockNtype*26)/8) + self.bb_marker)
             except TypeError as type_exc:
                 raise FCBError("Content MUST be bye of type `bytes`")
         else:
@@ -110,7 +116,7 @@ class FCB(object):
 
         @return int ECC size in bits
         """
-        return (self.ecc_block_type * 26)
+        return (self.ecc_blockNtype * 26)
 
     def get_ecc_blockN_strength(self):
         """
@@ -118,7 +124,7 @@ class FCB(object):
 
         @return int ECC strength (BCH)
         """
-        return (self.ecc_block_type)
+        return (self.ecc_blockNtype)
 
     def get_data_block0_size(self):
         """
@@ -143,6 +149,8 @@ class FCB(object):
         @param metadata_bytes   int Metadata bytes size
         """
         self.metadata_bytes = metadata_bytes
+        # Update calculations
+        self.set_bb_marker(self.bb_marker)
 
     def set_page_data_size(self, page_data_size):
         """
@@ -159,7 +167,10 @@ class FCB(object):
         @param ecc_size int ECC size in bits.
         """
         self.ecc_block0type = int(ecc_size/26)
-        self.ecc_block_type = int(ecc_size/26)
+        self.ecc_blockNtype = int(ecc_size/26)
+
+        # Update calculations
+        self.set_bb_marker(self.bb_marker)
 
     def set_bb_marker(self, bb_marker):
         """
@@ -171,7 +182,7 @@ class FCB(object):
         # We compute the raw marker offset
         self.marker_page = int(self.bb_marker/self.ecc_blockNsize)
         self.marker_offset = self.bb_marker % self.ecc_blockNsize
-        self.marker_raw_offset = int(self.metadata_bytes + ceil((self.ecc_block0type*26)/8) + ceil((self.marker_page-1)*(self.ecc_block_type*26)/8) + self.bb_marker)
+        self.marker_raw_offset = int(self.metadata_bytes + ceil((self.ecc_block0type*26)/8) + ceil((self.marker_page-1)*(self.ecc_blockNtype*26)/8) + self.bb_marker)
 
     def display(self):
         """
@@ -189,7 +200,7 @@ class FCB(object):
         print('---[ ECC ]--------------------')
         print(' > ECC block 0 type:\t' + formatval('%d (%d bits)' % (self.ecc_block0type, self.ecc_block0type*26)))
         print(' > ECC block 0 size:\t' + formatval('%d bytes' % self.ecc_block0size))
-        print(' > ECC block N type:\t' + formatval('%d (%d bits)' % (self.ecc_block_type, self.ecc_block_type*26)))
+        print(' > ECC block N type:\t' + formatval('%d (%d bits)' % (self.ecc_blockNtype, self.ecc_blockNtype*26)))
         print(' > ECC block N size:\t' + formatval('%d bytes' % self.ecc_blockNsize))
         print(' > Metadata bytes:\t' + formatval('%d' % self.metadata_bytes))
         # Original NumEccBlocksPerPage does not include Block0

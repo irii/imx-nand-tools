@@ -15,16 +15,20 @@ from argparse import ArgumentParser
 from termcolor import colored
 from imxtools.fcb import FCB, FCBError
 
+prim_poly_tab = [0x25, 0x43, 0x83, 0x11d, 0x211, 0x409, 0x805, 0x1053, 0x201b, 0x402b, 0x8003]
+
 class BCH:
-    instance = None
+    instances = {}
 
     @staticmethod
     def get_instance(ecc_strength):
-        if BCH.instance is None:
-            BCH.instance = bchlib.BCH(8219, ecc_strength, reverse=True)
-        return BCH.instance
+        instance = BCH.instances.get(ecc_strength)
+        if instance is None:
+            instance = bchlib.BCH(ecc_strength, prim_poly=prim_poly_tab[8], swap_bits=True)
+            BCH.instances[ecc_strength] = instance
+        return instance
 
-def skip_bits(page, nbits, nbytes):
+def skip_bits(page, nbits):
     """
     Skip bits for a given page
     """
@@ -39,7 +43,7 @@ def skip_bits(page, nbits, nbytes):
     if rel_shift > 0:
         # Loop over bytes and shift rel_shift bits to the left
         output = []
-        for i in range(nbytes):
+        for i in range(len(page) - 1):
             output.append(
                 (page[i]>>rel_shift) | ((page[i+1] << comp_shift)&0xff)
             )
@@ -65,12 +69,15 @@ def ecc_correct(block, code, ecc_strength):
     """
     Try to fix `block` with `code`, for an ECC size of `bitsize`.
     """
-    try:
-        block_ = BCH.get_instance(ecc_strength).correct(bytes(block), bytes(code))
-        return block_
-    except Exception as e:
-        return block
+    instance = BCH.get_instance(ecc_strength)
+    block_arr = bytearray(block)
+    code_arr = bytearray(code)
 
+    nerr = instance.decode(block_arr, code_arr)
+    if nerr > 0:
+        instance.correct(block_arr, code_arr)
+
+    return bytes(block_arr)
 
 def process_page(page, fcb, ecc=False):
     """
@@ -87,37 +94,30 @@ def process_page(page, fcb, ecc=False):
     nb_blocks = fcb.nb_ecc_blocks_per_page+1
 
     # Iterate over each block
-    n = 8
     for i in range(nb_blocks):
         # First block is processed separately
         if i==0:
-            ecc_size = fcb.get_ecc_block0_size()
             ecc_strength = fcb.get_ecc_block0_strength()
             block_size = fcb.get_data_block0_size()
         else:
-            ecc_size = fcb.get_ecc_blockN_size()
             ecc_strength = fcb.get_ecc_blockN_strength()
             block_size = fcb.get_data_blockN_size()
 
-        ecc_nb_bytes = int(ecc_size/8)
-        if (fcb.get_ecc_block0_size()%8 > 0):
-            ecc_nb_bytes += 1
-        ecc = page[block_size:block_size+ecc_nb_bytes]
-
-
-        # copy block_size bytes
         block = page[:block_size]
+
+        page = skip_bits(page, block_size*8)
+
+        ecc_nb_bytes = ceil(ecc_strength*13/8)
+        ecc_bytes = page[:ecc_nb_bytes]
+
+        page = skip_bits(page, ecc_strength*13)
 
         # try to correct block if required
         if ecc:
-            block = ecc_correct(block, ecc, ecc_strength*2)
+            block = ecc_correct(block, ecc_bytes, ecc_strength)
 
         # save block
         blocks.append(block)
-
-        # skip ecc_size (in bits) bits
-        page = skip_bits(page, block_size*8 + ecc_size, int(((block_size*8 + ecc_size)*(n-1))/8))
-        n -= 1
 
     # Align to original page size
     output = []
@@ -178,8 +178,6 @@ def convert_nand_dump(content, fcb, output, bb_marker_override=None, metadata_ov
     globsize = len(content)
     nbblocks = int(globsize/blocksize)
 
-    valid_blocks = 0
-    bad_blocks = 0
     output = open(output,'wb')
     bar = progressbar.ProgressBar(max_value=nbblocks)
     for i in range(nbblocks):
@@ -203,3 +201,19 @@ def find_fcb_offset(content):
         return -1
     except ValueError as exc:
         return -1
+    
+
+def find_dbbt_offset(content):
+    """
+    Find DBBT Block offset
+
+    @return int offset >=0 on success, -1 if an error occured.
+    """
+    try:
+        index = content.index(b'DBBT')
+        if (index > 4):
+            return (index-4)
+        return -1
+    except ValueError as exc:
+        return -1
+

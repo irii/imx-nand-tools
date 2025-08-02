@@ -40,7 +40,7 @@ def main():
     # Override offset if provided
     if args.offset is not None:
         # Accept decimal and hexadecimal offset values
-        if args.offset.lower().startswidth('0x'):
+        if args.offset.lower().startswith('0x'):
             offset = int(args.offset, 16)
         else:
             offset = int(args.offset)

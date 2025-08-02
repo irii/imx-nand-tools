@@ -10,18 +10,18 @@ IMX Nand Conversion tool
 """
 
 from argparse import ArgumentParser
-from imxtools import convert_nand_dump, find_fcb_offset, extract_firmware
+from imxtools import convert_nand_dump, find_fcb_offset, extract_firmware, parse_fcb
 from imxtools.fcb import FCB
 from termcolor import colored
 
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument('-o', '--offset', dest='offset', help='Force FCB offset value')
-    parser.add_argument('-b', '--bad-block-offset', dest='bb_offset', help='Force bad block marker offset')
-    parser.add_argument('-p', '--page-size', dest='page_size', help='Force page size (in bytes)')
-    parser.add_argument('-m', '--metadata-size', dest='metadata_size', help='Force metadata size (in bytes)')
-    parser.add_argument('-e', '--ecc-size', dest='ecc_size', help='Force ECC size (in bits)')
+    parser.add_argument('-o', '--offset', type=int, dest='offset', help='Force FCB offset value')
+    parser.add_argument('-b', '--bad-block-offset', type=int, dest='bb_offset', help='Force bad block marker offset')
+    parser.add_argument('-p', '--page-size', type=int, dest='page_size', help='Force page size (in bytes)')
+    parser.add_argument('-m', '--metadata-size', type=int, dest='metadata_size', help='Force metadata size (in bytes)')
+    parser.add_argument('-e', '--ecc-size', type=int, dest='ecc_size', help='Force ECC size (in bits)')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, dest='verbose', help='Be more verbose')
     parser.add_argument('-f', '--firmware', dest='firmware', type=int, help='Firmware number to extract (default: 1)')
     parser.add_argument('-c', '--correct', dest='ecc', action='store_true', default=False, help='Correct errors with ECC')
@@ -46,7 +46,7 @@ def main():
     # Override offset if provided
     if args.offset is not None:
         # Accept decimal and hexadecimal offset values
-        if args.offset.lower().startswidth('0x'):
+        if args.offset.lower().startswith('0x'):
             offset = int(args.offset, 16)
         else:
             offset = int(args.offset)
@@ -56,6 +56,9 @@ def main():
     if offset < 0:
         print('!!'+colored('FCB not found, check your dump.', 'red', attrs=['bold']))
     else:
+        fcb = dump[offset:offset+140]
+        parse_fcb(fcb, verbosity=args.verbose, display=True)
+    
         if args.firmware is not None:
             if args.firmware in [1,2]:
                 print('>> FCB found at offset 0x%08x' % offset)
