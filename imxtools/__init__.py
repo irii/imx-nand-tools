@@ -77,15 +77,18 @@ def ecc_correct(block, code, ecc_strength):
     if nerr > 0:
         instance.correct(block_arr, code_arr)
 
-    return bytes(block_arr)
+    return block
 
-def process_page(page, fcb, ecc=False):
+def process_page(page, fcb, ecc=False, page_index=0):
     """
     Split page in blocks and ecc codes.
     """
     # First, remove metadata bytes
     page_size = len(page)
     marker = page[0]
+    if page[fcb.marker_raw_offset]==0xff and page_index > 0:
+        return b''
+
     #assert(page[fcb.marker_raw_offset]==0xff)
     page = page[:fcb.marker_raw_offset] + bytes([marker]) + page[fcb.marker_raw_offset+1:]
     page = page[fcb.metadata_bytes:]
@@ -158,7 +161,7 @@ def extract_firmware(content, fcb, output, firmware_id, bb_marker_override=None,
     for i in range(nbblocks):
         bar.update(i)
         page = content[i*blocksize:(i+1)*blocksize]
-        c_block = process_page(page, fcb, correct_ecc)
+        c_block = process_page(page, fcb, correct_ecc, i)
         output.write(c_block)
     output.close()
 
