@@ -97,9 +97,11 @@ def process_page(page, fcb, ecc=False):
     for i in range(nb_blocks):
         # First block is processed separately
         if i==0:
+            ecc_size = fcb.get_ecc_block0_size()
             ecc_strength = fcb.get_ecc_block0_strength()
             block_size = fcb.get_data_block0_size()
         else:
+            ecc_size = fcb.get_ecc_blockN_size()
             ecc_strength = fcb.get_ecc_blockN_strength()
             block_size = fcb.get_data_blockN_size()
 
@@ -107,14 +109,14 @@ def process_page(page, fcb, ecc=False):
 
         page = skip_bits(page, block_size*8)
 
-        ecc_nb_bytes = ceil(ecc_strength*13/8)
+        ecc_nb_bytes = ceil(ecc_size/8)
         ecc_bytes = page[:ecc_nb_bytes]
 
-        page = skip_bits(page, ecc_strength*13)
+        page = skip_bits(page, ecc_size)
 
         # try to correct block if required
         if ecc:
-            block = ecc_correct(block, ecc_bytes, ecc_strength)
+            block = ecc_correct(block, ecc_bytes, ecc_strength*2)
 
         # save block
         blocks.append(block)
